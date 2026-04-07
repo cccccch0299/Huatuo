@@ -133,15 +133,19 @@ h1 {
 
 .toolbar {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 12px;
     align-items: end;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
 }
 
 .field {
     display: grid;
     gap: 8px;
     min-width: 140px;
+    flex: 0 0 auto;
 }
 
 .field span {
@@ -166,11 +170,33 @@ select {
     padding: 11px 14px;
 }
 
+.input-with-action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.input-with-action input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .btn {
     min-height: 46px;
     padding: 11px 18px;
     cursor: pointer;
+    flex: 0 0 auto;
     transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+
+input[type="datetime-local"] {
+    min-width: 220px;
+}
+
+.btn-picker {
+    min-width: 72px;
+    padding-inline: 14px;
+    white-space: nowrap;
 }
 
 .btn:hover {
