@@ -17,9 +17,21 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 try:
+    import numpy as np
+except ImportError:  # pragma: no cover - handled at runtime
+    np = None
+
+try:
     import asyncpg
 except ImportError:  # pragma: no cover - handled at runtime
     asyncpg = None
+
+try:
+    from data_processing import apply_filters
+    FILTER_IMPORT_ERROR = None
+except Exception as exc:  # pragma: no cover - handled at runtime
+    apply_filters = None
+    FILTER_IMPORT_ERROR = exc
 
 
 logging.basicConfig(
@@ -41,6 +53,8 @@ CHANNEL_MAP = {
     0: "emg_2",  
 }
 CHANNEL_COLUMNS = ("eeg_1", "eeg_2", "emg_1", "emg_2")
+EEG_CHANNEL_COLUMNS = ("eeg_1", "eeg_2")
+EEG_SUB_BANDS = ("delta", "theta", "alpha", "beta")
 INSERT_COLUMNS = ("time", "user_id", *CHANNEL_COLUMNS, "event_label")
 DEFAULT_CHANNEL_VALUES = {column: None for column in CHANNEL_COLUMNS}
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
@@ -413,13 +427,13 @@ async def fetch_rows_from_db(app: FastAPI, user_id: int, limit: int) -> List[Dic
     return rows
 
 
-async def fetch_history_rows(
+async def fetch_history_records(
     app: FastAPI,
     user_id: int,
     start_time: Optional[datetime],
     end_time: Optional[datetime],
     limit: int,
-) -> List[Dict[str, Any]]:
+) -> Sequence[Any]:
     query = """
         SELECT time, user_id, eeg_1, eeg_2, emg_1, emg_2, event_label
         FROM eeg_data
@@ -430,22 +444,104 @@ async def fetch_history_rows(
         LIMIT $4
     """
     async with app.state.pool.acquire() as conn:
-        records = await conn.fetch(query, user_id, start_time, end_time, limit)
+        return await conn.fetch(query, user_id, start_time, end_time, limit)
 
-    rows = []
-    for record in records:
-        rows.append(
-            {
-                "time": record["time"].astimezone(timezone.utc).isoformat(),
-                "user_id": record["user_id"],
-                "eeg_1": record["eeg_1"],
-                "eeg_2": record["eeg_2"],
-                "emg_1": record["emg_1"],
-                "emg_2": record["emg_2"],
-                "event_label": record["event_label"],
-            }
+def ensure_history_filtering_available() -> None:
+    if np is None:
+        raise RuntimeError("numpy is not installed. Run `pip install -r requirements.txt` first.")
+    if apply_filters is None:
+        detail = f"Unable to import data_processing.apply_filters: {FILTER_IMPORT_ERROR}"
+        raise RuntimeError(detail)
+
+
+def interpolate_missing_values(values: Any) -> Any:
+    series = np.asarray(values, dtype=np.float64)
+    if series.size == 0:
+        return series
+
+    valid_mask = np.isfinite(series)
+    if valid_mask.all():
+        return series
+    if not valid_mask.any():
+        return np.zeros(series.shape, dtype=np.float64)
+
+    indices = np.arange(series.size)
+    if valid_mask.sum() == 1:
+        return np.full(series.shape, series[valid_mask][0], dtype=np.float64)
+
+    filled = series.copy()
+    filled[~valid_mask] = np.interp(indices[~valid_mask], indices[valid_mask], series[valid_mask])
+    return filled
+
+
+def build_empty_history_signals() -> Dict[str, Dict[str, Any]]:
+    signals: Dict[str, Dict[str, Any]] = {}
+    for channel in CHANNEL_COLUMNS:
+        payload: Dict[str, Any] = {
+            "main": {
+                "raw": [],
+                "clean": [],
+            },
+        }
+        if channel in EEG_CHANNEL_COLUMNS:
+            payload["bands"] = {band: [] for band in EEG_SUB_BANDS}
+        signals[channel] = payload
+    return signals
+
+
+def build_filtered_history_payload(
+    records: Sequence[Any],
+    user_id: int,
+    start_time: Optional[datetime],
+    end_time: Optional[datetime],
+) -> Dict[str, Any]:
+    ensure_history_filtering_available()
+
+    time_axis_ms = [
+        round((record["time"].astimezone(timezone.utc) - EPOCH).total_seconds() * 1000)
+        for record in records
+    ]
+    signals = build_empty_history_signals()
+
+    if not records:
+        return {
+            "user_id": user_id,
+            "source": "database-history-filtered",
+            "sample_rate_hz": ALIGN_SAMPLE_RATE_HZ,
+            "start_time": start_time.isoformat() if start_time else None,
+            "end_time": end_time.isoformat() if end_time else None,
+            "time_axis_ms": time_axis_ms,
+            "signals": signals,
+        }
+
+    for channel in CHANNEL_COLUMNS:
+        raw_values = np.asarray(
+            [record[channel] if record[channel] is not None else np.nan for record in records],
+            dtype=np.float64,
         )
-    return rows
+        prepared_values = interpolate_missing_values(raw_values)
+        filtered = apply_filters(prepared_values, extract_sub_bands=channel in EEG_CHANNEL_COLUMNS)
+        channel_payload = signals[channel]
+        channel_payload["main"] = {
+            "raw": [float(value) if np.isfinite(value) else None for value in raw_values],
+            "clean": filtered["main_0.5_40Hz"].astype(float).tolist(),
+        }
+
+        if channel in EEG_CHANNEL_COLUMNS:
+            channel_payload["bands"] = {
+                band: filtered[band].astype(float).tolist()
+                for band in EEG_SUB_BANDS
+            }
+
+    return {
+        "user_id": user_id,
+        "source": "database-history-filtered",
+        "sample_rate_hz": ALIGN_SAMPLE_RATE_HZ,
+        "start_time": start_time.isoformat() if start_time else None,
+        "end_time": end_time.isoformat() if end_time else None,
+        "time_axis_ms": time_axis_ms,
+        "signals": signals,
+    }
 
 
 async def fetch_time_bounds(app: FastAPI, user_id: int) -> Dict[str, Any]:
@@ -611,14 +707,11 @@ def build_app() -> FastAPI:
         if parsed_start_time and parsed_end_time and parsed_start_time > parsed_end_time:
             raise HTTPException(status_code=422, detail="start_time must be earlier than end_time")
 
-        rows = await fetch_history_rows(app, user_id, parsed_start_time, parsed_end_time, limit)
-        return {
-            "user_id": user_id,
-            "rows": rows,
-            "source": "database-history",
-            "start_time": parsed_start_time.isoformat() if parsed_start_time else None,
-            "end_time": parsed_end_time.isoformat() if parsed_end_time else None,
-        }
+        try:
+            records = await fetch_history_records(app, user_id, parsed_start_time, parsed_end_time, limit)
+            return build_filtered_history_payload(records, user_id, parsed_start_time, parsed_end_time)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.get("/api/eeg/bounds")
     async def get_eeg_bounds(
