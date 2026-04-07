@@ -37,6 +37,9 @@ const rangeMeta = document.getElementById("rangeMeta");
 const modeInput = document.getElementById("viewMode");
 const userIdInput = document.getElementById("userId");
 const historyStartInput = document.getElementById("historyStart");
+const historyEndInput = document.getElementById("historyEnd");
+const historyStartPickerBtn = document.getElementById("historyStartPicker");
+const historyEndPickerBtn = document.getElementById("historyEndPicker");
 const pixelsPerSecondInput = document.getElementById("pixelsPerSecond");
 const loadBtn = document.getElementById("loadBtn");
 const clearBtn = document.getElementById("clearBtn");
@@ -46,7 +49,7 @@ function pad(value, width = 2) {
 }
 
 function toDateTimeLocalValue(date) {
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function fromDateTimeLocalValue(value) {
@@ -105,7 +108,6 @@ function setSocketStatus(status, label) {
 
 function updateModeUI() {
     const isRealtime = state.mode === "realtime";
-    historyStartInput.disabled = isRealtime;
     loadBtn.textContent = isRealtime ? "Start Realtime" : "Load History";
 
     if (isRealtime) {
@@ -305,27 +307,48 @@ function computeHistoryLimit(startMs, endMs) {
     return Math.max(2000, Math.min(200000, estimatedRows));
 }
 
-function setHistoryStartFromIso(isoString) {
+function setHistoryInputFromIso(input, isoString) {
     if (!isoString) {
-        historyStartInput.value = "";
+        input.value = "";
         return;
     }
-    historyStartInput.value = toDateTimeLocalValue(new Date(isoString));
+    input.value = toDateTimeLocalValue(new Date(isoString));
 }
 
-async function ensureHistoryStart(userId) {
-    const explicitStart = fromDateTimeLocalValue(historyStartInput.value);
-    if (explicitStart) {
-        return explicitStart;
+function openDateTimePicker(input) {
+    if (!input) {
+        return;
     }
 
-    const bounds = state.bounds && state.bounds.user_id === userId ? state.bounds : await fetchBounds(userId);
+    input.focus();
+    if (typeof input.showPicker === "function") {
+        input.showPicker();
+        return;
+    }
+    input.click();
+}
+
+async function ensureHistoryRange(bounds) {
+    const explicitStart = fromDateTimeLocalValue(historyStartInput.value);
     if (!bounds.earliest_time) {
         throw new Error("No data available for this user.");
     }
+    if (!bounds.latest_time) {
+        throw new Error("No latest sample found for this user.");
+    }
 
-    setHistoryStartFromIso(bounds.earliest_time);
-    return new Date(bounds.earliest_time);
+    const explicitEnd = fromDateTimeLocalValue(historyEndInput.value);
+    const startDate = explicitStart ?? new Date(bounds.earliest_time);
+    const endDate = explicitEnd ?? new Date(bounds.latest_time);
+
+    if (!explicitStart) {
+        setHistoryInputFromIso(historyStartInput, bounds.earliest_time);
+    }
+    if (!explicitEnd) {
+        setHistoryInputFromIso(historyEndInput, bounds.latest_time);
+    }
+
+    return { startDate, endDate };
 }
 
 async function loadHistory() {
@@ -343,16 +366,25 @@ async function loadHistory() {
         return;
     }
 
-    const startDate = await ensureHistoryStart(state.userId);
+    const { startDate, endDate } = await ensureHistoryRange(bounds);
+    if (startDate.getTime() > endDate.getTime()) {
+        throw new Error("Start time must be earlier than End time.");
+    }
+
+    const earliestDate = new Date(bounds.earliest_time);
     const latestDate = new Date(bounds.latest_time);
     if (startDate.getTime() > latestDate.getTime()) {
         throw new Error("Start time is later than the latest database row.");
     }
+    if (endDate.getTime() < earliestDate.getTime()) {
+        throw new Error("End time is earlier than the earliest database row.");
+    }
 
-    const limit = computeHistoryLimit(startDate.getTime(), latestDate.getTime());
+    const limit = computeHistoryLimit(startDate.getTime(), endDate.getTime());
     const params = new URLSearchParams({
         user_id: String(state.userId),
         start_time: startDate.toISOString(),
+        end_time: endDate.toISOString(),
         limit: String(limit),
     });
 
@@ -360,7 +392,7 @@ async function loadHistory() {
     state.source = payload.source || "database-history";
     state.autoFollow = false;
     state.rangeStartMs = startDate.getTime();
-    state.rangeEndMs = latestDate.getTime();
+    state.rangeEndMs = endDate.getTime();
     applyViewWindow(startDate.getTime(), false);
     commitRows(payload.rows || []);
 }
@@ -386,46 +418,66 @@ function buildSeries(channelKey) {
     return state.rows.map((row) => [row.timeMs, row[channelKey]]);
 }
 
-function paneGraphics(topPadding, gridHeight, gap) {
+function paneGraphics(paneHeight, topPadding, gap, paneLeft, paneRight) {
     const chartWidth = chart.getWidth() || chartHost.clientWidth || 1200;
-    const paneWidth = Math.max(220, chartWidth - 118);
+    const paneWidth = Math.max(220, chartWidth - paneLeft - paneRight);
 
-    return CHANNELS.flatMap((channel, index) => {
-        const top = topPadding + index * (gridHeight + gap) - 6;
-        const fill = index % 2 === 0 ? "#fbfdff" : "#f4f8fc";
-        return [
-            {
-                type: "rect",
-                left: 58,
-                top,
-                shape: {
-                    width: paneWidth,
-                    height: gridHeight + 12,
-                    r: 12,
-                },
-                style: {
-                    fill,
-                    stroke: "#d4dee8",
-                    lineWidth: 1,
-                },
-                silent: true,
-                z: 0,
+    return CHANNELS.map((channel, index) => {
+        const top = topPadding + index * (paneHeight + gap);
+        return {
+            type: "rect",
+            left: paneLeft,
+            top,
+            shape: {
+                width: paneWidth,
+                height: paneHeight,
+                r: 12,
             },
-        ];
+            style: {
+                fill: index % 2 === 0 ? "#fbfdff" : "#f4f8fc",
+                stroke: "#d4dee8",
+                lineWidth: 1,
+            },
+            silent: true,
+            z: 0,
+        };
     });
+}
+
+function paneTitles(paneHeight, topPadding, gap, gridLeft) {
+    return CHANNELS.map((channel, index) => ({
+        text: channel.label,
+        left: gridLeft + 12,
+        top: topPadding + index * (paneHeight + gap) + 10,
+        padding: 0,
+        z: 6,
+        textStyle: {
+            color: "#19232e",
+            fontSize: 12,
+            fontWeight: 700,
+            fontFamily: '"IBM Plex Sans", "Segoe UI", sans-serif',
+        },
+    }));
 }
 
 function renderChart() {
     chart.resize();
 
     const chartHeight = chart.getHeight() || 820;
-    const topPadding = 26;
-    const bottomPadding = 82;
-    const gap = 16;
-    const gridHeight = Math.max(
-        96,
+    const topPadding = 30;
+    const bottomPadding = 86;
+    const gap = 26;
+    const paneLeft = 72;
+    const paneRight = 26;
+    const gridLeft = 116;
+    const gridRight = 32;
+    const panePaddingTop = 30;
+    const panePaddingBottom = 10;
+    const paneHeight = Math.max(
+        126,
         Math.floor((chartHeight - topPadding - bottomPadding - gap * (CHANNELS.length - 1)) / CHANNELS.length)
     );
+    const gridHeight = Math.max(86, paneHeight - panePaddingTop - panePaddingBottom);
 
     const axisMin = state.rangeStartMs ?? (state.rows[0]?.timeMs ?? Date.now() - 1000);
     const axisMax = state.rangeEndMs ?? (state.rows[state.rows.length - 1]?.timeMs ?? Date.now());
@@ -436,11 +488,12 @@ function renderChart() {
         {
             animation: false,
             backgroundColor: "#f6f9fd",
-            graphic: paneGraphics(topPadding, gridHeight, gap),
+            graphic: paneGraphics(paneHeight, topPadding, gap, paneLeft, paneRight),
+            title: paneTitles(paneHeight, topPadding, gap, gridLeft),
             grid: CHANNELS.map((channel, index) => ({
-                left: 82,
-                right: 26,
-                top: topPadding + index * (gridHeight + gap),
+                left: gridLeft,
+                right: gridRight,
+                top: topPadding + index * (paneHeight + gap) + panePaddingTop,
                 height: gridHeight,
             })),
             tooltip: {
@@ -467,17 +520,13 @@ function renderChart() {
             yAxis: CHANNELS.map((channel, index) => ({
                 type: "value",
                 gridIndex: index,
-                name: channel.label,
-                nameLocation: "start",
-                nameGap: 16,
-                nameTextStyle: {
-                    color: "#19232e",
-                    fontSize: 12,
-                    fontWeight: 700,
-                },
+                name: "",
                 axisLine: { show: false },
                 axisTick: { show: false },
-                axisLabel: { color: "#425262" },
+                axisLabel: {
+                    color: "#425262",
+                    margin: 14,
+                },
                 splitLine: { lineStyle: { color: "#dde6ef", width: 1 } },
                 scale: true,
             })),
@@ -596,6 +645,14 @@ pixelsPerSecondInput.addEventListener("change", () => {
     }
     updateMetrics();
     renderChart();
+});
+
+historyStartPickerBtn.addEventListener("click", () => {
+    openDateTimePicker(historyStartInput);
+});
+
+historyEndPickerBtn.addEventListener("click", () => {
+    openDateTimePicker(historyEndInput);
 });
 
 loadBtn.addEventListener("click", loadCurrentMode);

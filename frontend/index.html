@@ -56,7 +56,17 @@
                 </label>
                 <label class="field">
                     <span>Start</span>
-                    <input id="historyStart" type="datetime-local">
+                    <div class="input-with-action">
+                        <input id="historyStart" type="datetime-local" step="1">
+                        <button id="historyStartPicker" type="button" class="btn btn-picker">Pick</button>
+                    </div>
+                </label>
+                <label class="field">
+                    <span>End</span>
+                    <div class="input-with-action">
+                        <input id="historyEnd" type="datetime-local" step="1">
+                        <button id="historyEndPicker" type="button" class="btn btn-picker">Pick</button>
+                    </div>
                 </label>
                 <label class="field">
                     <span>Scale (px/s)</span>
@@ -66,7 +76,7 @@
                 <button id="clearBtn" class="btn">Clear</button>
             </div>
             <p class="toolbar-note">
-                History mode uses a fixed horizontal scale and bottom scrollbar. If Start is empty, the earliest row for the selected user is used automatically.
+                History mode uses a fixed horizontal scale and bottom scrollbar. If Start or End is empty, the selected user's earliest or latest row is used automatically.
             </p>
         </section>
 
