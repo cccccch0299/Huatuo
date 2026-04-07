@@ -32,7 +32,7 @@ public class OutboundBatch
     public float createdAt;
 }
 
-public class NeuroManagerService : MonoBehaviour
+public class NewNeuroManagerService : MonoBehaviour
 {
     private const int MinTrackedChannel = 0;
     private const int MaxTrackedChannel = 3;
@@ -48,7 +48,7 @@ public class NeuroManagerService : MonoBehaviour
     public TMP_Text tmpText;
 
     [Header("Backend")]
-    [SerializeField] private string backendUploadUrl = "http://127.0.0.1:8000/api/eeg/upload";
+    [SerializeField] private string backendUploadUrl = "http://192.168.0.162:8000/api/eeg/upload";
     [SerializeField] private int userId = 1;
     [SerializeField] private int sampleRateHz = 250;
     [SerializeField] private float flushIntervalSeconds = 0.10f;
@@ -172,6 +172,14 @@ public class NeuroManagerService : MonoBehaviour
         {
             tmpText.text = $"ch {channel} latest {latestValue:F3}";
         }
+
+        if (isRecording)
+        {
+            if (tmpText != null)
+            {
+                tmpText.text = $"ch {channel} latest {latestValue:F3}";
+            }
+        }
     }
 
     private void EnqueueSamples(int channel, double[] samples)
@@ -196,7 +204,7 @@ public class NeuroManagerService : MonoBehaviour
                 {
                     ch = channel,
                     val = (float)samples[index],
-                    sTime = sampleTime.ToString("o")
+                    sTime = sampleTime.ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
                 };
 
                 pendingPoints.Add(point);
@@ -260,7 +268,7 @@ public class NeuroManagerService : MonoBehaviour
             OutboundBatch batch = outboundQueue.Dequeue();
             string json = JsonUtility.ToJson(batch.payload);
             byte[] requestBody = System.Text.Encoding.UTF8.GetBytes(json);
-
+            Debug.Log($"[NeuroXessLog] JSON Context: {json}");
             using (UnityWebRequest request = new UnityWebRequest(backendUploadUrl, UnityWebRequest.kHttpVerbPOST))
             {
                 request.uploadHandler = new UploadHandlerRaw(requestBody);
@@ -276,6 +284,11 @@ public class NeuroManagerService : MonoBehaviour
                 else
                 {
                     Debug.LogWarning($"[NeuroXess] upload failed: {request.error}");
+
+                    if (request.downloadHandler != null)
+                    {
+                        Debug.LogError($"[NeuroXessLog] error detail: {request.downloadHandler.text}");
+                    }
                     outboundQueue.Enqueue(batch);
                     yield return new WaitForSecondsRealtime(retryDelaySeconds);
                 }
@@ -334,6 +347,10 @@ public class NeuroManagerService : MonoBehaviour
             channelSampleCounts.Clear();
             pendingPoints.Clear();
         }
+        string timeIntStr = DateTime.Now.ToString("MMddHHmm");
+        // 将这个字符串转换成整数，赋值给 userId
+        userId = int.Parse(timeIntStr);
+        Debug.Log($"[NeuroXess]  UserID : {userId}");
 
         string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         filePath = Path.Combine(Application.persistentDataPath, $"EEG_Data_{timeStamp}.csv");
