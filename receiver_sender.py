@@ -28,11 +28,17 @@ logging.basicConfig(
 )
 LOGGER = logging.getLogger("eeg-backend")
 
+# CHANNEL_MAP = {
+#     0: "eeg_1",
+#     1: "eeg_2",
+#     2: "emg_1",
+#     3: "emg_2",
+# }
 CHANNEL_MAP = {
-    0: "eeg_1",
-    1: "eeg_2",
-    2: "emg_1",
-    3: "emg_2",
+    1: "eeg_1",  
+    2: "eeg_2",  
+    3: "emg_1",  
+    0: "emg_2",  
 }
 CHANNEL_COLUMNS = ("eeg_1", "eeg_2", "emg_1", "emg_2")
 INSERT_COLUMNS = ("time", "user_id", *CHANNEL_COLUMNS, "event_label")

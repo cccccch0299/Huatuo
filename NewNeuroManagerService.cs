@@ -176,6 +176,8 @@ public class NeuroManagerService : MonoBehaviour
 
     private void EnqueueSamples(int channel, double[] samples)
     {
+        // --- 开关逻辑 ---
+        if (!isRecording) return;
         double sampleIntervalMs = 1000.0 / Mathf.Max(1, sampleRateHz);
 
         lock (bufferLock)
@@ -325,6 +327,13 @@ public class NeuroManagerService : MonoBehaviour
         {
             return;
         }
+        // 1. 重置同步状态，确保新一轮录制的时间戳从 0 开始重新校准
+        lock (bufferLock)
+        {
+            streamStartUtc = null;
+            channelSampleCounts.Clear();
+            pendingPoints.Clear();
+        }
 
         string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         filePath = Path.Combine(Application.persistentDataPath, $"EEG_Data_{timeStamp}.csv");
@@ -354,6 +363,7 @@ public class NeuroManagerService : MonoBehaviour
         }
 
         isRecording = false;
+        FlushPendingSamples();
 
         if (csvWriter != null)
         {
