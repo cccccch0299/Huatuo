@@ -44,10 +44,22 @@ def apply_filters(raw_data, extract_sub_bands=False):
     """
     # 第一步：过 50Hz 陷波器去除工频干扰
     # 使用 filtfilt 进行零相移滤波（比实时系统的 lfilter 更好，不会产生时间延迟）
-    notched_data = signal.filtfilt(bn, an, raw_data)
+    raw_data = np.asarray(raw_data, dtype=float)
+
+    def safe_filtfilt(b, a, values):
+        if values.size <= 1:
+            return values.copy()
+
+        padlen = min(3 * max(len(a), len(b)), values.size - 1)
+        if padlen < 1:
+            return values.copy()
+
+        return signal.filtfilt(b, a, values, padlen=padlen)
+
+    notched_data = safe_filtfilt(bn, an, raw_data)
     
     # 第二步：过 0.5-40Hz 主带通滤波器
-    clean_main = signal.filtfilt(b_main, a_main, notched_data)
+    clean_main = safe_filtfilt(b_main, a_main, notched_data)
     
     # 保留小数点后3位，与 C# 中的 OnFilterDecimal 保持一致
     clean_main = np.round(clean_main, 3)
@@ -58,10 +70,10 @@ def apply_filters(raw_data, extract_sub_bands=False):
     
     # 如果深度学习需要提取特定脑波特征，可以开启这个选项
     if extract_sub_bands:
-        results["delta"] = np.round(signal.filtfilt(b_delta, a_delta, notched_data), 3)
-        results["theta"] = np.round(signal.filtfilt(b_theta, a_theta, notched_data), 3)
-        results["alpha"] = np.round(signal.filtfilt(b_alpha, a_alpha, notched_data), 3)
-        results["beta"] = np.round(signal.filtfilt(b_beta, a_beta, notched_data), 3)
+        results["delta"] = np.round(safe_filtfilt(b_delta, a_delta, notched_data), 3)
+        results["theta"] = np.round(safe_filtfilt(b_theta, a_theta, notched_data), 3)
+        results["alpha"] = np.round(safe_filtfilt(b_alpha, a_alpha, notched_data), 3)
+        results["beta"] = np.round(safe_filtfilt(b_beta, a_beta, notched_data), 3)
         
     return results
 

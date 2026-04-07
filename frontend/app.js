@@ -1,9 +1,32 @@
-const CHANNELS = [
-    { key: "eeg_1", label: "EEG 1", color: "#005ea8" },
-    { key: "eeg_2", label: "EEG 2", color: "#2048b3" },
-    { key: "emg_1", label: "EMG 1", color: "#087447" },
-    { key: "emg_2", label: "EMG 2", color: "#b75a00" },
+const MAIN_CHANNELS = [
+    { key: "eeg_1", label: "EEG 1", color: "#005ea8", toggleBands: true },
+    { key: "eeg_2", label: "EEG 2", color: "#2048b3", toggleBands: true },
+    { key: "emg_1", label: "EMG 1", color: "#087447", toggleBands: false },
+    { key: "emg_2", label: "EMG 2", color: "#b75a00", toggleBands: false },
 ];
+
+const SUB_BANDS = [
+    { key: "delta", label: "Delta", color: "#4b71f2" },
+    { key: "theta", label: "Theta", color: "#1f9bb4" },
+    { key: "alpha", label: "Alpha", color: "#9a5de0" },
+    { key: "beta", label: "Beta", color: "#d26a1b" },
+];
+
+const CHANNEL_BY_KEY = Object.fromEntries(MAIN_CHANNELS.map((channel) => [channel.key, channel]));
+
+function defaultExpandedBands() {
+    return {
+        eeg_1: false,
+        eeg_2: false,
+    };
+}
+
+function defaultLegendSelection() {
+    return {
+        Raw: false,
+        Clean: true,
+    };
+}
 
 const state = {
     mode: "realtime",
@@ -12,6 +35,7 @@ const state = {
     sampleRateHz: 250,
     realtimeBufferSeconds: 12,
     rows: [],
+    historyData: null,
     socket: null,
     source: "-",
     socketStatus: "offline",
@@ -21,10 +45,13 @@ const state = {
     viewEndMs: null,
     autoFollow: true,
     bounds: null,
+    expandedBands: defaultExpandedBands(),
+    legendSelection: defaultLegendSelection(),
 };
 
 const chartHost = document.getElementById("chartScroll");
-const chart = echarts.init(document.getElementById("chart"), null, { renderer: "canvas" });
+const chartEl = document.getElementById("chart");
+const chart = echarts.init(chartEl, null, { renderer: "canvas" });
 
 const socketDot = document.getElementById("socketDot");
 const socketText = document.getElementById("socketText");
@@ -62,7 +89,7 @@ function fromDateTimeLocalValue(value) {
 }
 
 function formatClock(timeMs) {
-    if (!timeMs) {
+    if (!timeMs && timeMs !== 0) {
         return "-";
     }
 
@@ -117,6 +144,20 @@ function updateModeUI() {
     }
 }
 
+function currentPointCount() {
+    if (state.mode === "history" && state.historyData) {
+        return state.historyData.timeAxisMs.length;
+    }
+    return state.rows.length;
+}
+
+function currentLastPointMs() {
+    if (state.mode === "history" && state.historyData) {
+        return state.historyData.timeAxisMs[state.historyData.timeAxisMs.length - 1] ?? null;
+    }
+    return state.rows[state.rows.length - 1]?.timeMs ?? null;
+}
+
 function updateMetrics() {
     const durationMs = state.rangeStartMs != null && state.rangeEndMs != null
         ? state.rangeEndMs - state.rangeStartMs
@@ -125,10 +166,10 @@ function updateMetrics() {
         ? state.viewEndMs - state.viewStartMs
         : 0;
 
-    sampleCount.textContent = String(state.rows.length);
+    sampleCount.textContent = String(currentPointCount());
     windowLabel.textContent = formatRange(durationMs);
     sourceLabel.textContent = state.source;
-    lastPointTime.textContent = formatClock(state.rows[state.rows.length - 1]?.timeMs);
+    lastPointTime.textContent = formatClock(currentLastPointMs());
 
     const modeLabel = state.mode === "realtime" ? "Realtime" : "History";
     const visibleStart = state.viewStartMs != null ? formatClock(state.viewStartMs) : "-";
@@ -142,7 +183,7 @@ function getRealtimeMaxRows() {
 
 function plotWidthPixels() {
     const hostWidth = chartHost.clientWidth || chart.getWidth() || 1200;
-    return Math.max(460, hostWidth - 120);
+    return Math.max(460, hostWidth - 132);
 }
 
 function visibleDurationMs() {
@@ -154,6 +195,67 @@ function normalizeRows(rows) {
         .map((row) => ({ ...row, timeMs: new Date(row.time).getTime() }))
         .filter((row) => Number.isFinite(row.timeMs))
         .sort((left, right) => left.timeMs - right.timeMs);
+}
+
+function normalizeNumericArray(values, expectedLength) {
+    const input = Array.isArray(values) ? values : [];
+    const normalized = new Array(expectedLength);
+
+    for (let index = 0; index < expectedLength; index += 1) {
+        const numericValue = Number(input[index]);
+        normalized[index] = Number.isFinite(numericValue) ? numericValue : null;
+    }
+
+    return normalized;
+}
+
+function zipSeries(timeAxisMs, values) {
+    const series = new Array(timeAxisMs.length);
+    for (let index = 0; index < timeAxisMs.length; index += 1) {
+        series[index] = [timeAxisMs[index], values[index]];
+    }
+    return series;
+}
+
+function normalizeHistoryPayload(payload) {
+    const timeAxisMs = Array.isArray(payload?.time_axis_ms)
+        ? payload.time_axis_ms.map((value) => Number(value)).filter((value) => Number.isFinite(value))
+        : [];
+
+    const signals = {};
+    for (const channel of MAIN_CHANNELS) {
+        const channelPayload = payload?.signals?.[channel.key] || {};
+        const mainPayload = Array.isArray(channelPayload.main)
+            ? { clean: channelPayload.main, raw: [] }
+            : (channelPayload.main || {});
+        const rawValues = normalizeNumericArray(mainPayload.raw, timeAxisMs.length);
+        const cleanValues = normalizeNumericArray(mainPayload.clean, timeAxisMs.length);
+        const signalState = {
+            rawValues,
+            rawSeries: zipSeries(timeAxisMs, rawValues),
+            cleanValues,
+            cleanSeries: zipSeries(timeAxisMs, cleanValues),
+            bands: {},
+        };
+
+        if (channel.toggleBands) {
+            for (const band of SUB_BANDS) {
+                const bandValues = normalizeNumericArray(channelPayload?.bands?.[band.key], timeAxisMs.length);
+                signalState.bands[band.key] = {
+                    values: bandValues,
+                    series: zipSeries(timeAxisMs, bandValues),
+                };
+            }
+        }
+
+        signals[channel.key] = signalState;
+    }
+
+    return {
+        sampleRateHz: Number(payload?.sample_rate_hz) || state.sampleRateHz,
+        timeAxisMs,
+        signals,
+    };
 }
 
 function applyViewWindow(preferredStartMs = null, anchorToEnd = false) {
@@ -181,8 +283,23 @@ function applyViewWindow(preferredStartMs = null, anchorToEnd = false) {
     state.viewEndMs = start + windowDuration;
 }
 
-function commitRows(rows) {
+function resetHistoryState() {
+    state.historyData = null;
+    state.expandedBands = defaultExpandedBands();
+    state.legendSelection = defaultLegendSelection();
+}
+
+function commitRealtimeRows(rows) {
+    resetHistoryState();
     state.rows = normalizeRows(rows);
+    updateMetrics();
+    renderChart();
+}
+
+function commitHistoryPayload(payload) {
+    state.rows = [];
+    state.historyData = normalizeHistoryPayload(payload);
+    state.sampleRateHz = state.historyData.sampleRateHz;
     updateMetrics();
     renderChart();
 }
@@ -357,12 +474,17 @@ async function loadHistory() {
 
     const bounds = await fetchBounds(state.userId);
     if (!bounds.earliest_time || !bounds.latest_time || !bounds.total_rows) {
-        state.source = "database-history";
+        state.source = "database-history-filtered";
         state.rangeStartMs = null;
         state.rangeEndMs = null;
         state.viewStartMs = null;
         state.viewEndMs = null;
-        commitRows([]);
+        resetHistoryState();
+        commitHistoryPayload({
+            sample_rate_hz: state.sampleRateHz,
+            time_axis_ms: [],
+            signals: {},
+        });
         return;
     }
 
@@ -389,18 +511,21 @@ async function loadHistory() {
     });
 
     const payload = await fetchJson(`/api/eeg/history?${params.toString()}`);
-    state.source = payload.source || "database-history";
+    state.source = payload.source || "database-history-filtered";
     state.autoFollow = false;
     state.rangeStartMs = startDate.getTime();
     state.rangeEndMs = endDate.getTime();
+    state.expandedBands = defaultExpandedBands();
+    state.legendSelection = defaultLegendSelection();
     applyViewWindow(startDate.getTime(), false);
-    commitRows(payload.rows || []);
+    commitHistoryPayload(payload);
 }
 
 async function loadRealtime() {
     const limit = getRealtimeMaxRows();
     const payload = await fetchJson(`/api/eeg/latest?user_id=${state.userId}&limit=${limit}`);
     state.source = payload.source || "database";
+    resetHistoryState();
     state.rows = normalizeRows(payload.rows || []);
 
     const lastRow = state.rows[state.rows.length - 1];
@@ -414,96 +539,356 @@ async function loadRealtime() {
     connectSocket();
 }
 
-function buildSeries(channelKey) {
-    return state.rows.map((row) => [row.timeMs, row[channelKey]]);
+function realtimeSeries(channelKey) {
+    return state.rows.map((row) => [row.timeMs, row[channelKey] ?? null]);
 }
 
-function paneGraphics(paneHeight, topPadding, gap, paneLeft, paneRight) {
-    const chartWidth = chart.getWidth() || chartHost.clientWidth || 1200;
-    const paneWidth = Math.max(220, chartWidth - paneLeft - paneRight);
-
-    return CHANNELS.map((channel, index) => {
-        const top = topPadding + index * (paneHeight + gap);
-        return {
-            type: "rect",
-            left: paneLeft,
-            top,
-            shape: {
-                width: paneWidth,
-                height: paneHeight,
-                r: 12,
-            },
-            style: {
-                fill: index % 2 === 0 ? "#fbfdff" : "#f4f8fc",
-                stroke: "#d4dee8",
-                lineWidth: 1,
-            },
-            silent: true,
-            z: 0,
-        };
-    });
+function historyHasBands(channelKey) {
+    const signal = state.historyData?.signals?.[channelKey];
+    if (!signal?.bands) {
+        return false;
+    }
+    return SUB_BANDS.every((band) => Array.isArray(signal.bands[band.key]?.series));
 }
 
-function paneTitles(paneHeight, topPadding, gap, gridLeft) {
-    return CHANNELS.map((channel, index) => ({
-        text: channel.label,
-        left: gridLeft + 12,
-        top: topPadding + index * (paneHeight + gap) + 10,
-        padding: 0,
-        z: 6,
-        textStyle: {
-            color: "#19232e",
-            fontSize: 12,
-            fontWeight: 700,
-            fontFamily: '"IBM Plex Sans", "Segoe UI", sans-serif',
-        },
+function getPaneDefinitions() {
+    if (state.mode === "history" && state.historyData) {
+        const panes = [];
+        for (const channel of MAIN_CHANNELS) {
+            const signal = state.historyData.signals[channel.key];
+            const canToggle = channel.toggleBands && historyHasBands(channel.key);
+            panes.push({
+                id: `${channel.key}:main`,
+                channelKey: channel.key,
+                label: channel.label,
+                color: channel.color,
+                rawData: signal?.rawSeries || [],
+                cleanData: signal?.cleanSeries || [],
+                kind: "main",
+                canToggle,
+                expanded: canToggle && state.expandedBands[channel.key],
+            });
+
+            if (canToggle && state.expandedBands[channel.key]) {
+                for (const band of SUB_BANDS) {
+                    panes.push({
+                        id: `${channel.key}:${band.key}`,
+                        channelKey: channel.key,
+                        label: `${channel.label} ${band.label}`,
+                        color: band.color,
+                        data: signal?.bands?.[band.key]?.series || [],
+                        kind: "sub",
+                        canToggle: false,
+                        expanded: false,
+                    });
+                }
+            }
+        }
+        return panes;
+    }
+
+    return MAIN_CHANNELS.map((channel) => ({
+        id: `${channel.key}:main`,
+        channelKey: channel.key,
+        label: channel.label,
+        color: channel.color,
+        data: realtimeSeries(channel.key),
+        kind: "main",
+        canToggle: false,
+        expanded: false,
     }));
 }
 
+function paneOuterHeight(pane) {
+    return pane.kind === "sub" ? 104 : 140;
+}
+
+function paneHeaderHeight(pane) {
+    return pane.kind === "sub" ? 28 : 38;
+}
+
+function layoutPanes(panes, layout) {
+    const positioned = [];
+    let cursorTop = layout.topPadding;
+
+    for (const pane of panes) {
+        const outerHeight = paneOuterHeight(pane);
+        const headerHeight = paneHeaderHeight(pane);
+        const gridHeight = Math.max(58, outerHeight - headerHeight - 12);
+
+        positioned.push({
+            ...pane,
+            top: cursorTop,
+            outerHeight,
+            headerHeight,
+            gridTop: cursorTop + headerHeight,
+            gridHeight,
+        });
+
+        cursorTop += outerHeight + layout.gap;
+    }
+
+    return positioned;
+}
+
+function chartHeightForPanes(panes, layout) {
+    if (!panes.length) {
+        return 820;
+    }
+
+    const paneHeights = panes.reduce((total, pane) => total + paneOuterHeight(pane), 0);
+    const gaps = layout.gap * Math.max(0, panes.length - 1);
+    return Math.max(820, layout.topPadding + layout.bottomPadding + paneHeights + gaps);
+}
+
+function toggleSubBands(channelKey) {
+    if (state.mode !== "history" || !historyHasBands(channelKey)) {
+        return;
+    }
+
+    state.expandedBands[channelKey] = !state.expandedBands[channelKey];
+    updateMetrics();
+    renderChart();
+}
+
+function buildPaneGraphics(panes, layout, paneWidth) {
+    const graphics = [];
+
+    for (const pane of panes) {
+        graphics.push({
+            type: "rect",
+            left: layout.paneLeft,
+            top: pane.top,
+            shape: {
+                width: paneWidth,
+                height: pane.outerHeight,
+                r: 14,
+            },
+            style: {
+                fill: pane.kind === "sub" ? "#f8fbff" : "#fbfdff",
+                stroke: pane.kind === "sub" ? "#dbe6f1" : "#d4dee8",
+                lineWidth: 1,
+                shadowBlur: 0,
+            },
+            silent: true,
+            z: 0,
+        });
+
+        graphics.push({
+            type: "rect",
+            left: layout.gridLeft + 12,
+            top: pane.top + 13,
+            shape: {
+                width: 10,
+                height: 10,
+                r: 5,
+            },
+            style: {
+                fill: pane.color,
+            },
+            silent: true,
+            z: 7,
+        });
+
+        graphics.push({
+            type: "text",
+            left: layout.gridLeft + 28,
+            top: pane.top + 8,
+            style: {
+                text: pane.label,
+                fill: "#19232e",
+                font: pane.kind === "sub"
+                    ? '600 11px "IBM Plex Sans", "Segoe UI", sans-serif'
+                    : '700 12px "IBM Plex Sans", "Segoe UI", sans-serif',
+            },
+            silent: true,
+            z: 7,
+        });
+
+        if (pane.canToggle) {
+            const buttonText = pane.expanded ? "收起节律" : "展示节律";
+            graphics.push({
+                type: "group",
+                left: layout.gridLeft + 112,
+                top: pane.top + 6,
+                cursor: "pointer",
+                onclick: () => toggleSubBands(pane.channelKey),
+                z: 8,
+                children: [
+                    {
+                        type: "rect",
+                        shape: {
+                            x: 0,
+                            y: 0,
+                            width: 104,
+                            height: 26,
+                            r: 13,
+                        },
+                        style: {
+                            fill: pane.expanded ? "#dfeeff" : "#edf5ff",
+                            stroke: pane.expanded ? "#8fb6e6" : "#bfd5ef",
+                            lineWidth: 1,
+                        },
+                    },
+                    {
+                        type: "text",
+                        style: {
+                            x: 52,
+                            y: 13,
+                            text: buttonText,
+                            fill: "#244d7d",
+                            font: '600 11px "IBM Plex Sans", "Segoe UI", sans-serif',
+                            textAlign: "center",
+                            textVerticalAlign: "middle",
+                        },
+                    },
+                ],
+            });
+        }
+    }
+
+    return graphics;
+}
+
 function renderChart() {
+    const panes = getPaneDefinitions();
+    const showHistoryLegend = state.mode === "history" && Boolean(state.historyData);
+    const layout = {
+        topPadding: showHistoryLegend ? 52 : 28,
+        bottomPadding: 88,
+        gap: 24,
+        paneLeft: 72,
+        paneRight: 28,
+        gridLeft: 118,
+        gridRight: 34,
+    };
+
+    chartEl.style.height = `${chartHeightForPanes(panes, layout)}px`;
     chart.resize();
 
-    const chartHeight = chart.getHeight() || 820;
-    const topPadding = 30;
-    const bottomPadding = 86;
-    const gap = 26;
-    const paneLeft = 72;
-    const paneRight = 26;
-    const gridLeft = 116;
-    const gridRight = 32;
-    const panePaddingTop = 30;
-    const panePaddingBottom = 10;
-    const paneHeight = Math.max(
-        126,
-        Math.floor((chartHeight - topPadding - bottomPadding - gap * (CHANNELS.length - 1)) / CHANNELS.length)
-    );
-    const gridHeight = Math.max(86, paneHeight - panePaddingTop - panePaddingBottom);
-
+    const positionedPanes = layoutPanes(panes, layout);
+    const chartWidth = chart.getWidth() || chartHost.clientWidth || 1200;
+    const paneWidth = Math.max(220, chartWidth - layout.paneLeft - layout.paneRight);
     const axisMin = state.rangeStartMs ?? (state.rows[0]?.timeMs ?? Date.now() - 1000);
     const axisMax = state.rangeEndMs ?? (state.rows[state.rows.length - 1]?.timeMs ?? Date.now());
     const zoomStartValue = state.viewStartMs ?? axisMin;
     const zoomEndValue = state.viewEndMs ?? axisMax;
+    const historySampling = state.mode === "history" && currentPointCount() > 6000 ? "lttb" : "none";
+    const series = positionedPanes.flatMap((pane, index) => {
+        if (pane.kind === "main" && state.mode === "history" && state.historyData) {
+            return [
+                {
+                    name: "Raw",
+                    type: "line",
+                    xAxisIndex: index,
+                    yAxisIndex: index,
+                    showSymbol: false,
+                    smooth: false,
+                    connectNulls: false,
+                    sampling: historySampling,
+                    progressive: 8000,
+                    progressiveThreshold: 12000,
+                    clip: true,
+                    data: pane.rawData,
+                    lineStyle: {
+                        color: "rgba(110, 120, 132, 0.44)",
+                        width: 1,
+                        opacity: 1,
+                    },
+                    z: 2,
+                },
+                {
+                    name: "Clean",
+                    type: "line",
+                    xAxisIndex: index,
+                    yAxisIndex: index,
+                    showSymbol: false,
+                    smooth: false,
+                    connectNulls: false,
+                    sampling: historySampling,
+                    progressive: 8000,
+                    progressiveThreshold: 12000,
+                    clip: true,
+                    data: pane.cleanData,
+                    lineStyle: {
+                        color: pane.color,
+                        width: 2.1,
+                        opacity: 1,
+                    },
+                    z: 4,
+                },
+            ];
+        }
+
+        return [
+            {
+                name: pane.label,
+                type: "line",
+                xAxisIndex: index,
+                yAxisIndex: index,
+                showSymbol: false,
+                smooth: false,
+                connectNulls: false,
+                sampling: historySampling,
+                progressive: 8000,
+                progressiveThreshold: 12000,
+                clip: true,
+                data: pane.data,
+                lineStyle: {
+                    color: pane.color,
+                    width: pane.kind === "sub" ? 1.7 : 2.1,
+                    opacity: 1,
+                },
+                z: 4,
+            },
+        ];
+    });
 
     chart.setOption(
         {
             animation: false,
             backgroundColor: "#f6f9fd",
-            graphic: paneGraphics(paneHeight, topPadding, gap, paneLeft, paneRight),
-            title: paneTitles(paneHeight, topPadding, gap, gridLeft),
-            grid: CHANNELS.map((channel, index) => ({
-                left: gridLeft,
-                right: gridRight,
-                top: topPadding + index * (paneHeight + gap) + panePaddingTop,
-                height: gridHeight,
+            graphic: buildPaneGraphics(positionedPanes, layout, paneWidth),
+            legend: {
+                show: showHistoryLegend,
+                data: ["Raw", "Clean"],
+                selected: state.legendSelection,
+                top: 12,
+                right: 20,
+                itemWidth: 16,
+                itemHeight: 10,
+                itemGap: 16,
+                icon: "roundRect",
+                backgroundColor: "rgba(255,255,255,0.9)",
+                borderColor: "#d8e2ec",
+                borderWidth: 1,
+                padding: [8, 12, 8, 12],
+                textStyle: {
+                    color: "#334456",
+                    fontSize: 12,
+                    fontWeight: 600,
+                },
+            },
+            axisPointer: {
+                link: [{ xAxisIndex: "all" }],
+            },
+            grid: positionedPanes.map((pane) => ({
+                left: layout.gridLeft,
+                right: layout.gridRight,
+                top: pane.gridTop,
+                height: pane.gridHeight,
             })),
             tooltip: {
                 trigger: "axis",
-                axisPointer: { animation: false, lineStyle: { color: "#5f7896", width: 1.2 } },
+                axisPointer: {
+                    animation: false,
+                    lineStyle: { color: "#5f7896", width: 1.2 },
+                },
                 backgroundColor: "rgba(255,255,255,0.96)",
                 borderColor: "#c9d6e4",
                 textStyle: { color: "#16202b" },
             },
-            xAxis: CHANNELS.map((channel, index) => ({
+            xAxis: positionedPanes.map((pane, index) => ({
                 type: "time",
                 min: axisMin,
                 max: axisMax,
@@ -512,12 +897,12 @@ function renderChart() {
                 axisTick: { show: false },
                 axisLabel: {
                     color: "#425262",
-                    show: index === CHANNELS.length - 1,
+                    show: index === positionedPanes.length - 1,
                     formatter: formatAxisLabel,
                 },
                 splitLine: { lineStyle: { color: "#d8e4ef", width: 1 } },
             })),
-            yAxis: CHANNELS.map((channel, index) => ({
+            yAxis: positionedPanes.map((pane, index) => ({
                 type: "value",
                 gridIndex: index,
                 name: "",
@@ -533,12 +918,12 @@ function renderChart() {
             dataZoom: [
                 {
                     type: "slider",
-                    xAxisIndex: CHANNELS.map((_, index) => index),
+                    xAxisIndex: positionedPanes.map((_, index) => index),
                     filterMode: "none",
                     showDataShadow: false,
                     brushSelect: false,
                     bottom: 16,
-                    height: 26,
+                    height: 28,
                     borderColor: "#c7d4e2",
                     backgroundColor: "#eef3f8",
                     fillerColor: "rgba(32, 72, 179, 0.16)",
@@ -556,24 +941,16 @@ function renderChart() {
                     startValue: zoomStartValue,
                     endValue: zoomEndValue,
                 },
-            ],
-            series: CHANNELS.map((channel, index) => ({
-                type: "line",
-                xAxisIndex: index,
-                yAxisIndex: index,
-                showSymbol: false,
-                smooth: false,
-                connectNulls: false,
-                sampling: "none",
-                clip: true,
-                data: buildSeries(channel.key),
-                lineStyle: {
-                    color: channel.color,
-                    width: 2.1,
-                    opacity: 1,
+                {
+                    type: "inside",
+                    xAxisIndex: positionedPanes.map((_, index) => index),
+                    filterMode: "none",
+                    moveOnMouseMove: true,
+                    moveOnMouseWheel: true,
+                    zoomOnMouseWheel: false,
                 },
-                z: 4,
-            })),
+            ],
+            series,
         },
         true
     );
@@ -598,6 +975,14 @@ chart.on("datazoom", () => {
         state.autoFollow = Math.abs(state.rangeEndMs - endValue) < 250;
     }
     updateMetrics();
+});
+
+chart.off("legendselectchanged");
+chart.on("legendselectchanged", (event) => {
+    state.legendSelection = {
+        ...state.legendSelection,
+        ...event.selected,
+    };
 });
 
 async function loadCurrentMode() {
@@ -629,6 +1014,7 @@ modeInput.addEventListener("change", () => {
         setSocketStatus("offline", "History");
     }
     updateModeUI();
+    renderChart();
 });
 
 userIdInput.addEventListener("change", () => {
@@ -660,7 +1046,8 @@ loadBtn.addEventListener("click", loadCurrentMode);
 clearBtn.addEventListener("click", () => {
     closeSocket();
     state.rows = [];
-    state.source = state.mode === "history" ? "database-history" : "-";
+    resetHistoryState();
+    state.source = state.mode === "history" ? "database-history-filtered" : "-";
     state.bounds = null;
 
     if (state.mode === "realtime") {
