@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EEG Review Console</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">EEG / EMG Review</p>
+                <h1>EEG Review Console</h1>
+            </div>
+            <div class="status-strip">
+                <div class="status-chip">
+                    <span class="status-label">Stream</span>
+                    <span class="status-value">
+                        <span id="socketDot" class="dot"></span>
+                        <span id="socketText">Offline</span>
+                    </span>
+                </div>
+                <div class="status-chip">
+                    <span class="status-label">Samples</span>
+                    <span id="sampleCount" class="status-number">0</span>
+                </div>
+                <div class="status-chip">
+                    <span class="status-label">Range</span>
+                    <span id="windowLabel" class="status-number">-</span>
+                </div>
+                <div class="status-chip">
+                    <span class="status-label">Source</span>
+                    <span id="sourceLabel" class="status-number">-</span>
+                </div>
+                <div class="status-chip">
+                    <span class="status-label">Last Point</span>
+                    <span id="lastPointTime" class="status-number status-small">-</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="controls-card">
+            <div class="toolbar">
+                <label class="field">
+                    <span>Mode</span>
+                    <select id="viewMode">
+                        <option value="realtime">Realtime</option>
+                        <option value="history">History</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>User ID</span>
+                    <input id="userId" type="number" min="1" value="99">
+                </label>
+                <label class="field">
+                    <span>Start</span>
+                    <input id="historyStart" type="datetime-local">
+                </label>
+                <label class="field">
+                    <span>Scale (px/s)</span>
+                    <input id="pixelsPerSecond" type="number" min="40" max="600" step="10" value="220">
+                </label>
+                <button id="loadBtn" class="btn primary">Load History</button>
+                <button id="clearBtn" class="btn">Clear</button>
+            </div>
+            <p class="toolbar-note">
+                History mode uses a fixed horizontal scale and bottom scrollbar. If Start is empty, the earliest row for the selected user is used automatically.
+            </p>
+        </section>
+
+        <section class="chart-card">
+            <div class="chart-header">
+                <div>
+                    <div class="chart-title">Waveform Timeline</div>
+                    <div class="chart-subtitle">Fixed pixels per second with synchronized horizontal scrolling</div>
+                </div>
+                <div class="chart-meta" id="rangeMeta">Waiting for data</div>
+            </div>
+
+            <div class="chart-scroll" id="chartScroll">
+                <div class="chart-inner" id="chartInner">
+                    <div id="chart" class="chart"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script type="module" src="/assets/app.js"></script>
+</body>
+</html>
