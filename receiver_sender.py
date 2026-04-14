@@ -51,11 +51,27 @@ CHANNEL_MAP = {
     2: "eeg_2",  
     3: "emg_1",  
     0: "emg_2",  
+    4: "blink_l",
+    5: "blink_r",
+    6: "gaze_x",
+    7: "gaze_y",
+    8: "gaze_z",
 }
-CHANNEL_COLUMNS = ("eeg_1", "eeg_2", "emg_1", "emg_2")
+CHANNEL_COLUMNS = (
+    "eeg_1",
+    "eeg_2",
+    "emg_1",
+    "emg_2",
+    "blink_l",
+    "blink_r",
+    "gaze_x",
+    "gaze_y",
+    "gaze_z",
+)
 EEG_CHANNEL_COLUMNS = ("eeg_1", "eeg_2")
 EEG_SUB_BANDS = ("delta", "theta", "alpha", "beta")
 INSERT_COLUMNS = ("time", "user_id", *CHANNEL_COLUMNS, "event_label")
+SELECT_COLUMNS_SQL = ", ".join(INSERT_COLUMNS)
 DEFAULT_CHANNEL_VALUES = {column: None for column in CHANNEL_COLUMNS}
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 LOCAL_TIMEZONE = datetime.now().astimezone().tzinfo or timezone.utc
@@ -118,29 +134,29 @@ class EEGRow:
     eeg_2: Optional[float]
     emg_1: Optional[float]
     emg_2: Optional[float]
+    blink_l: Optional[float]
+    blink_r: Optional[float]
+    gaze_x: Optional[float]
+    gaze_y: Optional[float]
+    gaze_z: Optional[float]
     event_label: Optional[str] = None
 
     def as_record(self) -> tuple[Any, ...]:
         return (
             self.time,
             self.user_id,
-            self.eeg_1,
-            self.eeg_2,
-            self.emg_1,
-            self.emg_2,
+            *(getattr(self, column) for column in CHANNEL_COLUMNS),
             self.event_label,
         )
 
     def as_payload(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "time": self.time.astimezone(timezone.utc).isoformat(),
             "user_id": self.user_id,
-            "eeg_1": self.eeg_1,
-            "eeg_2": self.eeg_2,
-            "emg_1": self.emg_1,
-            "emg_2": self.emg_2,
             "event_label": self.event_label,
         }
+        payload.update({column: getattr(self, column) for column in CHANNEL_COLUMNS})
+        return payload
 
 
 class ConnectionManager:
@@ -230,7 +246,7 @@ def normalize_sample_time(sample_time: datetime) -> datetime:
         + delta.seconds * 1_000_000
         + delta.microseconds
     )
-    bucket_us = round(epoch_us / SAMPLE_PERIOD_US) * SAMPLE_PERIOD_US
+    bucket_us = (epoch_us // SAMPLE_PERIOD_US) * SAMPLE_PERIOD_US
     return EPOCH + timedelta(microseconds=bucket_us)
 
 
@@ -254,6 +270,11 @@ def align_payload(payload: DataWrapper) -> List[EEGRow]:
             eeg_2=channels["eeg_2"],
             emg_1=channels["emg_1"],
             emg_2=channels["emg_2"],
+            blink_l=channels["blink_l"],
+            blink_r=channels["blink_r"],
+            gaze_x=channels["gaze_x"],
+            gaze_y=channels["gaze_y"],
+            gaze_z=channels["gaze_z"],
             event_label=payload.event_label,
         )
         for sample_time, channels in aligned_rows.items()
@@ -298,6 +319,11 @@ async def ensure_schema(pool: Any) -> None:
                 eeg_2       DOUBLE PRECISION  NULL,
                 emg_1       DOUBLE PRECISION  NULL,
                 emg_2       DOUBLE PRECISION  NULL,
+                blink_l     DOUBLE PRECISION  NULL,
+                blink_r     DOUBLE PRECISION  NULL,
+                gaze_x      DOUBLE PRECISION  NULL,
+                gaze_y      DOUBLE PRECISION  NULL,
+                gaze_z      DOUBLE PRECISION  NULL,
                 event_label TEXT              NULL
             );
             """
@@ -401,8 +427,8 @@ async def ingest_worker(app: FastAPI) -> None:
 
 
 async def fetch_rows_from_db(app: FastAPI, user_id: int, limit: int) -> List[Dict[str, Any]]:
-    query = """
-        SELECT time, user_id, eeg_1, eeg_2, emg_1, emg_2, event_label
+    query = f"""
+        SELECT {SELECT_COLUMNS_SQL}
         FROM eeg_data
         WHERE user_id = $1
         ORDER BY time DESC
@@ -413,17 +439,13 @@ async def fetch_rows_from_db(app: FastAPI, user_id: int, limit: int) -> List[Dic
 
     rows = []
     for record in reversed(records):
-        rows.append(
-            {
-                "time": record["time"].astimezone(timezone.utc).isoformat(),
-                "user_id": record["user_id"],
-                "eeg_1": record["eeg_1"],
-                "eeg_2": record["eeg_2"],
-                "emg_1": record["emg_1"],
-                "emg_2": record["emg_2"],
-                "event_label": record["event_label"],
-            }
-        )
+        row_payload = {
+            "time": record["time"].astimezone(timezone.utc).isoformat(),
+            "user_id": record["user_id"],
+            "event_label": record["event_label"],
+        }
+        row_payload.update({column: record[column] for column in CHANNEL_COLUMNS})
+        rows.append(row_payload)
     return rows
 
 
@@ -434,8 +456,8 @@ async def fetch_history_records(
     end_time: Optional[datetime],
     limit: int,
 ) -> Sequence[Any]:
-    query = """
-        SELECT time, user_id, eeg_1, eeg_2, emg_1, emg_2, event_label
+    query = f"""
+        SELECT {SELECT_COLUMNS_SQL}
         FROM eeg_data
         WHERE user_id = $1
           AND ($2::timestamptz IS NULL OR time >= $2)

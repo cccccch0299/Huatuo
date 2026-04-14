@@ -432,6 +432,11 @@ function setHistoryInputFromIso(input, isoString) {
     input.value = toDateTimeLocalValue(new Date(isoString));
 }
 
+function clearHistoryInputs() {
+    historyStartInput.value = "";
+    historyEndInput.value = "";
+}
+
 function openDateTimePicker(input) {
     if (!input) {
         return;
@@ -791,7 +796,7 @@ function renderChart() {
                     clip: true,
                     data: pane.rawData,
                     lineStyle: {
-                        color: "rgba(110, 120, 132, 0.44)",
+                        color: "rgba(110, 120, 132, 0.9)",
                         width: 1,
                         opacity: 1,
                     },
@@ -1018,7 +1023,11 @@ modeInput.addEventListener("change", () => {
 });
 
 userIdInput.addEventListener("change", () => {
+    const nextUserId = Number(userIdInput.value) || 1;
     state.bounds = null;
+    if (nextUserId !== state.userId) {
+        clearHistoryInputs();
+    }
 });
 
 pixelsPerSecondInput.addEventListener("change", () => {
@@ -1057,6 +1066,7 @@ clearBtn.addEventListener("click", () => {
         state.autoFollow = true;
         applyViewWindow(null, true);
     } else {
+        clearHistoryInputs();
         state.rangeStartMs = null;
         state.rangeEndMs = null;
         state.viewStartMs = null;
