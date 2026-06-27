@@ -1,0 +1,51 @@
+
+==================================================
+知识蒸馏: RobustEEGCNN Teacher → BIOT Student
+==================================================
+Teacher: RobustEEGCNN(4ch, 500pt, 2cls)
+Student: BIOT(4ch, 500pt, 2cls)
+蒸馏温度 T=3.0, alpha=0.7 (硬标签权重)
+设备: cpu
+预计算 Teacher soft labels...
+Teacher soft labels: train (7137, 2), test (1577, 2)
+Student 参数量: 1,218,818
+  Epoch   1/80  Loss=1.8251  CE=0.8198  KL=0.4634  Val_F1=0.5799
+  Epoch   5/80  Loss=1.5415  CE=0.6831  KL=0.3938  Val_F1=0.6302
+  Epoch  10/80  Loss=1.4584  CE=0.6789  KL=0.3641  Val_F1=0.6228
+  Epoch  15/80  Loss=1.4291  CE=0.6657  KL=0.3567  Val_F1=0.5563
+  Epoch  20/80  Loss=1.3918  CE=0.6209  KL=0.3545  Val_F1=0.5208
+  Epoch  25/80  Loss=1.4050  CE=0.6441  KL=0.3534  Val_F1=0.6205
+  Epoch  30/80  Loss=1.3738  CE=0.6314  KL=0.3451  Val_F1=0.6143
+  Epoch  35/80  Loss=1.3666  CE=0.6320  KL=0.3423  Val_F1=0.4929
+  Epoch  40/80  Loss=1.3490  CE=0.6181  KL=0.3394  Val_F1=0.6121
+  Epoch  45/80  Loss=1.3404  CE=0.6017  KL=0.3404  Val_F1=0.6099
+  Epoch  50/80  Loss=1.3209  CE=0.5855  KL=0.3374  Val_F1=0.5507
+  Epoch  55/80  Loss=1.3253  CE=0.5934  KL=0.3370  Val_F1=0.6116
+  早停于 Epoch 55
+
+==================================================
+蒸馏 BIOT Student 测试集评估结果
+==================================================
+准确率 (Accuracy):  0.5973
+F1 分数:            0.6302
+精确率 (Precision): 0.8336
+召回率 (Recall):    0.5066
+AUC-ROC:            0.6855
+
+混淆矩阵:
+                 预测正常(1)  预测障碍(0)
+  实际正常(1)         541           527
+  实际障碍(0)         108           401
+
+分类报告:
+              precision    recall  f1-score   support
+
+     认知障碍(0)       0.43      0.79      0.56       509
+       正常(1)       0.83      0.51      0.63      1068
+
+    accuracy                           0.60      1577
+   macro avg       0.63      0.65      0.59      1577
+weighted avg       0.70      0.60      0.61      1577
+
+
+模型已保存至: /home/ubuntu/Huatuo/model/../test/distilled_biot_model.pt

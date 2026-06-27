@@ -34,6 +34,9 @@ Thumbs.db
 test/*.joblib
 test/*.pt
 test/*.pkl
+model/pretrained/*.ckpt
+*.apk
+*.apk.*
 
 # Backup files
 *.bak
@@ -41,3 +44,14 @@ test/*.pkl
 
 # Temporary files
 .~*
+
+# Large datasets
+other_dataset/
+*.set
+*.fdt
+
+# Pretrained models
+model/pretrained/
+
+# Backup directories
+备份/

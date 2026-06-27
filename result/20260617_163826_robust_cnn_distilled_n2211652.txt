@@ -1,0 +1,41 @@
+
+==================================================
+Teacher-Guided Student 训练
+==================================================
+策略: Teacher backbone 权重初始化 + Huatuo 微调
+设备: cpu
+从 Teacher 迁移了 35 层 backbone 权重
+Student 参数量: 250,434
+  Epoch   1/50  Loss=0.6770  Val_F1=0.8203
+  Epoch  10/50  Loss=0.4601  Val_F1=0.8976
+  Epoch  20/50  Loss=0.3938  Val_F1=0.9060
+  Epoch  30/50  Loss=0.3571  Val_F1=0.9110
+  Epoch  40/50  Loss=0.3476  Val_F1=0.9205
+  Epoch  50/50  Loss=0.3202  Val_F1=0.9338
+
+==================================================
+Teacher-Guided Student 测试集评估结果
+==================================================
+准确率 (Accuracy):  0.9090
+F1 分数:            0.9338
+精确率 (Precision): 0.9180
+召回率 (Recall):    0.9502
+AUC-ROC:            0.9663
+
+混淆矩阵:
+                 预测正常(1)  预测障碍(0)
+  实际正常(1)         515            27
+  实际障碍(0)          46           214
+
+分类报告:
+              precision    recall  f1-score   support
+
+     认知障碍(0)       0.89      0.82      0.85       260
+       正常(1)       0.92      0.95      0.93       542
+
+    accuracy                           0.91       802
+   macro avg       0.90      0.89      0.89       802
+weighted avg       0.91      0.91      0.91       802
+
+
+模型已保存至: /home/ubuntu/Huatuo/model/../test/distilled_cnn_model.pt

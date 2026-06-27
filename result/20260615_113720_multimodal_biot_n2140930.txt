@@ -1,0 +1,51 @@
+
+==================================================
+开始训练 Multimodal-BIOT 二分类模型 (设备: cuda)
+==================================================
+类别权重: [障碍=1.98, 正常=1.00]
+模型总参数量: 1,378,882
+可训练参数量: 1,378,882
+  Epoch   1/80  Loss=0.4539  Val_Acc=0.7990  Val_F1=0.8303
+  Epoch   5/80  Loss=0.2916  Val_Acc=0.8240  Val_F1=0.8653
+  Epoch  10/80  Loss=0.2798  Val_Acc=0.8215  Val_F1=0.8672
+  Epoch  15/80  Loss=0.2691  Val_Acc=0.9126  Val_F1=0.9397
+  Epoch  20/80  Loss=0.2651  Val_Acc=0.9089  Val_F1=0.9359
+  Epoch  25/80  Loss=0.2612  Val_Acc=0.8277  Val_F1=0.8705
+  Epoch  30/80  Loss=0.2366  Val_Acc=0.7940  Val_F1=0.8403
+  Epoch  35/80  Loss=0.2396  Val_Acc=0.9251  Val_F1=0.9484
+  Epoch  40/80  Loss=0.2280  Val_Acc=0.9213  Val_F1=0.9449
+  Epoch  45/80  Loss=0.2177  Val_Acc=0.7728  Val_F1=0.8233
+  Epoch  50/80  Loss=0.2245  Val_Acc=0.8352  Val_F1=0.8776
+  Epoch  55/80  Loss=0.2080  Val_Acc=0.7990  Val_F1=0.8483
+  Epoch  60/80  Loss=0.2077  Val_Acc=0.8152  Val_F1=0.8617
+  Epoch  65/80  Loss=0.2066  Val_Acc=0.8165  Val_F1=0.8630
+  Epoch  70/80  Loss=0.2103  Val_Acc=0.8065  Val_F1=0.8542
+  Epoch  75/80  Loss=0.2028  Val_Acc=0.8265  Val_F1=0.8712
+  Epoch  80/80  Loss=0.1965  Val_Acc=0.8265  Val_F1=0.8712
+
+==================================================
+测试集评估结果 (Multimodal-BIOT)
+==================================================
+准确率 (Accuracy):  0.9251
+F1 分数:            0.9484
+精确率 (Precision): 0.9018
+召回率 (Recall):    1.0000
+AUC-ROC:            0.9598
+
+混淆矩阵:
+                 预测正常(1)  预测障碍(0)
+  实际正常(1)         551             0
+  实际障碍(0)          60           190
+
+分类报告:
+              precision    recall  f1-score   support
+
+     认知障碍(0)       1.00      0.76      0.86       250
+       正常(1)       0.90      1.00      0.95       551
+
+    accuracy                           0.93       801
+   macro avg       0.95      0.88      0.91       801
+weighted avg       0.93      0.93      0.92       801
+
+
+模型已保存至: /home/ubuntu/Huatuo/model/../test/multimodal_biot_model.pt

@@ -1,0 +1,43 @@
+
+==================================================
+知识蒸馏: RobustEEGCNN Teacher → BIOT Student
+==================================================
+Teacher: RobustEEGCNN(4ch, 500pt, 2cls)
+Student: BIOT(4ch, 500pt, 2cls)
+蒸馏温度 T=4.0, alpha=0.3 (硬标签权重)
+设备: cpu
+预计算 Teacher soft labels...
+Teacher soft labels: train (7137, 2), test (1577, 2)
+Student 参数量: 1,218,818
+  Epoch   1/20  Loss=3.7422  CE=3.0442  KL=0.2526  Val_F1=0.4058
+  Epoch   5/20  Loss=2.3839  CE=4.0424  KL=0.1046  Val_F1=0.3726
+  Epoch  10/20  Loss=2.0681  CE=4.1054  KL=0.0747  Val_F1=0.3607
+  Epoch  15/20  Loss=1.9367  CE=4.1238  KL=0.0625  Val_F1=0.3600
+  Epoch  20/20  Loss=1.8778  CE=4.1233  KL=0.0572  Val_F1=0.3529
+
+==================================================
+蒸馏 BIOT Student 测试集评估结果
+==================================================
+准确率 (Accuracy):  0.4020
+F1 分数:            0.4058
+精确率 (Precision): 0.6204
+召回率 (Recall):    0.3015
+AUC-ROC:            0.2885
+
+混淆矩阵:
+                 预测正常(1)  预测障碍(0)
+  实际正常(1)         322           746
+  实际障碍(0)         197           312
+
+分类报告:
+              precision    recall  f1-score   support
+
+     认知障碍(0)       0.29      0.61      0.40       509
+       正常(1)       0.62      0.30      0.41      1068
+
+    accuracy                           0.40      1577
+   macro avg       0.46      0.46      0.40      1577
+weighted avg       0.52      0.40      0.40      1577
+
+
+模型已保存至: /home/ubuntu/Huatuo/model/../test/distilled_biot_model.pt

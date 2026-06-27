@@ -1,0 +1,52 @@
+
+==================================================
+Official BIOT 训练 (设备: cuda)
+==================================================
+预训练权重通道数: 18, 我们的数据通道数: 4
+预训练权重加载成功！
+模型总参数: 3,187,220
+  Epoch   1/80  Loss=0.5877  Val_F1=0.8017
+  Epoch   5/80  Loss=0.4226  Val_F1=0.9301
+  Epoch  10/80  Loss=0.3623  Val_F1=0.9117
+  Epoch  15/80  Loss=0.3206  Val_F1=0.9330
+  Epoch  20/80  Loss=0.2750  Val_F1=0.9263
+  Epoch  25/80  Loss=0.2614  Val_F1=0.9228
+  Epoch  30/80  Loss=0.2447  Val_F1=0.9320
+  Epoch  35/80  Loss=0.2363  Val_F1=0.9123
+  Epoch  40/80  Loss=0.2325  Val_F1=0.9347
+  Epoch  45/80  Loss=0.2294  Val_F1=0.9401
+  Epoch  50/80  Loss=0.2265  Val_F1=0.9434
+  Epoch  55/80  Loss=0.2240  Val_F1=0.9380
+  Epoch  60/80  Loss=0.2227  Val_F1=0.9453
+  Epoch  65/80  Loss=0.2234  Val_F1=0.9376
+  Epoch  70/80  Loss=0.2227  Val_F1=0.9357
+  Epoch  75/80  Loss=0.2225  Val_F1=0.9383
+  Epoch  80/80  Loss=0.2224  Val_F1=0.9366
+
+==================================================
+测试集评估结果 (Official BIOT)
+预训练权重: EEG-six-datasets-18-channels.ckpt
+==================================================
+准确率 (Accuracy):  0.9238
+F1 分数:            0.9453
+精确率 (Precision): 0.9344
+召回率 (Recall):    0.9564
+AUC-ROC:            0.9232
+
+混淆矩阵:
+                 预测正常(1)  预测障碍(0)
+  实际正常(1)         527            24
+  实际障碍(0)          37           213
+
+分类报告:
+              precision    recall  f1-score   support
+
+     认知障碍(0)       0.90      0.85      0.87       250
+       正常(1)       0.93      0.96      0.95       551
+
+    accuracy                           0.92       801
+   macro avg       0.92      0.90      0.91       801
+weighted avg       0.92      0.92      0.92       801
+
+
+模型已保存至: /home/ubuntu/Huatuo/model/../test/biot_official_model.pt

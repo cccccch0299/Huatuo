@@ -1,0 +1,53 @@
+
+==================================================
+知识蒸馏: RobustEEGCNN Teacher → BIOT Student
+==================================================
+Teacher: RobustEEGCNN(4ch, 500pt, 2cls)
+Student: BIOT(4ch, 500pt, 2cls)
+蒸馏温度 T=4.0, alpha=0.3 (硬标签权重)
+设备: cpu
+预计算 Teacher soft labels...
+Teacher soft labels: train (7137, 2), test (1577, 2)
+Student 参数量: 1,218,818
+  Epoch   1/80  Loss=3.8615  CE=3.9452  KL=0.2391  Val_F1=0.5273
+  Epoch   5/80  Loss=2.6635  CE=4.7159  KL=0.1115  Val_F1=0.5127
+  Epoch  10/80  Loss=2.3867  CE=4.6404  KL=0.0888  Val_F1=0.5162
+  Epoch  15/80  Loss=2.2946  CE=4.5895  KL=0.0819  Val_F1=0.5380
+  Epoch  20/80  Loss=2.2200  CE=4.5629  KL=0.0760  Val_F1=0.5098
+  Epoch  25/80  Loss=2.2054  CE=4.5657  KL=0.0746  Val_F1=0.5140
+  Epoch  30/80  Loss=2.1730  CE=4.5526  KL=0.0721  Val_F1=0.5355
+  Epoch  35/80  Loss=2.1432  CE=4.5398  KL=0.0698  Val_F1=0.5321
+  Epoch  40/80  Loss=2.1245  CE=4.5052  KL=0.0690  Val_F1=0.5277
+  Epoch  45/80  Loss=2.1086  CE=4.5244  KL=0.0671  Val_F1=0.5297
+  Epoch  50/80  Loss=2.0960  CE=4.5130  KL=0.0663  Val_F1=0.5368
+  Epoch  55/80  Loss=2.0841  CE=4.4873  KL=0.0659  Val_F1=0.5258
+  Epoch  60/80  Loss=2.0792  CE=4.4957  KL=0.0652  Val_F1=0.5299
+  Epoch  65/80  Loss=2.0724  CE=4.4993  KL=0.0645  Val_F1=0.5323
+  早停于 Epoch 65
+
+==================================================
+蒸馏 BIOT Student 测试集评估结果
+==================================================
+准确率 (Accuracy):  0.4413
+F1 分数:            0.5380
+精确率 (Precision): 0.6114
+召回率 (Recall):    0.4803
+AUC-ROC:            0.4126
+
+混淆矩阵:
+                 预测正常(1)  预测障碍(0)
+  实际正常(1)         513           555
+  实际障碍(0)         326           183
+
+分类报告:
+              precision    recall  f1-score   support
+
+     认知障碍(0)       0.25      0.36      0.29       509
+       正常(1)       0.61      0.48      0.54      1068
+
+    accuracy                           0.44      1577
+   macro avg       0.43      0.42      0.42      1577
+weighted avg       0.49      0.44      0.46      1577
+
+
+模型已保存至: /home/ubuntu/Huatuo/model/../test/distilled_biot_model.pt

@@ -1,0 +1,43 @@
+
+==================================================
+开始训练 MultimodalTemporal 二分类模型 (设备: cuda)
+==================================================
+类别权重: [障碍=5.50, 正常=1.00]
+可训练参数: 618,242
+总参数量: 618,242
+  Epoch   1/80  Loss=0.5285  Val_Acc=0.1429  Val_F1=0.0000
+  Epoch  10/80  Loss=0.2845  Val_Acc=0.6429  Val_F1=0.7619
+  Epoch  20/80  Loss=0.1956  Val_Acc=0.9286  Val_F1=0.9600
+  Epoch  30/80  Loss=0.2119  Val_Acc=0.9286  Val_F1=0.9600
+  Epoch  40/80  Loss=0.1768  Val_Acc=0.9286  Val_F1=0.9600
+  Epoch  50/80  Loss=0.1435  Val_Acc=0.9286  Val_F1=0.9600
+  Epoch  60/80  Loss=0.1421  Val_Acc=0.9286  Val_F1=0.9600
+  Epoch  70/80  Loss=0.2126  Val_Acc=0.8571  Val_F1=0.9231
+  Epoch  80/80  Loss=0.1286  Val_Acc=0.9286  Val_F1=0.9600
+
+==================================================
+测试集评估结果 (MultimodalTemporal)
+==================================================
+准确率 (Accuracy):  0.9286
+F1 分数:            0.9600
+精确率 (Precision): 0.9231
+召回率 (Recall):    1.0000
+AUC-ROC:            0.5417
+
+混淆矩阵:
+                 预测正常(1)  预测障碍(0)
+  实际正常(1)          12             0
+  实际障碍(0)           1             1
+
+分类报告:
+              precision    recall  f1-score   support
+
+     认知障碍(0)       1.00      0.50      0.67         2
+       正常(1)       0.92      1.00      0.96        12
+
+    accuracy                           0.93        14
+   macro avg       0.96      0.75      0.81        14
+weighted avg       0.93      0.93      0.92        14
+
+
+模型已保存至: /home/ubuntu/Huatuo/model/../test/multimodal_model.pt
