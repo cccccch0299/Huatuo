@@ -52,7 +52,13 @@
                 </label>
                 <label class="field">
                     <span>User ID</span>
-                    <input id="userId" type="number" min="1" value="99">
+                    <div class="input-with-action">
+                        <input id="userId" type="number" min="1" value="99">
+                        <label class="auto-detect-toggle" title="Auto-detect active user">
+                            <input id="autoDetect" type="checkbox">
+                            <span>Auto</span>
+                        </label>
+                    </div>
                 </label>
                 <label class="field">
                     <span>Start</span>
@@ -80,20 +86,65 @@
             </p>
         </section>
 
-        <section class="chart-card">
-            <div class="chart-header">
-                <div>
-                    <div class="chart-title">Waveform Timeline</div>
-                    <div class="chart-subtitle">Fixed pixels per second with raw-vs-clean overlays and synchronized EEG sub-band views</div>
+        <section class="analysis-stack">
+            <section class="chart-card">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">Waveform Timeline</div>
+                        <div class="chart-subtitle">EEG1 / EEG2 / EMG1 / EMG2 plus Blink Event Track with one shared bottom scrollbar</div>
+                    </div>
+                    <div class="chart-meta" id="rangeMeta">Waiting for data</div>
                 </div>
-                <div class="chart-meta" id="rangeMeta">Waiting for data</div>
-            </div>
 
-            <div class="chart-scroll" id="chartScroll">
-                <div class="chart-inner" id="chartInner">
-                    <div id="chart" class="chart"></div>
+                <div class="chart-scroll" id="chartScroll">
+                    <div class="chart-inner" id="chartInner">
+                        <div id="chart" class="chart"></div>
+                    </div>
                 </div>
-            </div>
+            </section>
+
+            <section class="gaze-card" id="gazeSection">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">2D Gaze Trajectory Map</div>
+                        <div class="chart-subtitle">Current visible time slice only. Point size follows |gaze_z| and arrows show gaze direction.</div>
+                    </div>
+                    <div class="chart-meta" id="gazeMeta">Waiting for data</div>
+                </div>
+                <div id="gazeChart" class="gaze-chart"></div>
+            </section>
+
+            <section class="diagnosis-card" id="diagnosisSection">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">AI 辅助诊断报告</div>
+                        <div class="chart-subtitle">基于机器学习模型的脑电分析与智能解读</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <div class="chart-meta" id="diagnosisMeta">-</div>
+                        <button id="diagnosisBtn" class="btn primary">生成 AI 诊断报告</button>
+                    </div>
+                </div>
+                <div id="diagnosisContent" class="diagnosis-content">
+                    <div class="diagnosis-placeholder">点击上方按钮，为当前用户生成 AI 辅助诊断报告</div>
+                </div>
+            </section>
+
+            <section class="terminal-card" id="terminalSection">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">Realtime Data Monitor</div>
+                        <div class="chart-subtitle">Live channel data stream from WebSocket</div>
+                    </div>
+                    <div class="chart-meta" id="terminalMeta">Waiting for data</div>
+                </div>
+                <div class="terminal-container" id="terminalContainer">
+                    <div class="terminal-sticky-header">
+                        <div class="terminal-line terminal-header">  TIME                      EEG_1      EEG_2      EMG_1      EMG_2      BLINK_L  BLINK_R  GAZE_X     GAZE_Y     GAZE_Z</div>
+                        <div class="terminal-line terminal-header">  ────────────────────────  ─────────  ─────────  ─────────  ─────────  ───────  ───────  ─────────  ─────────  ─────────</div>
+                    </div>
+                </div>
+            </section>
         </section>
     </main>
 

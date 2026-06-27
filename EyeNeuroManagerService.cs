@@ -80,7 +80,7 @@ public class EyeNeuroManagerService : MonoBehaviour
 
     void Awake()
     {
-        PXR_MotionTracking.WantEyeTrackingService();
+        //PXR_MotionTracking.WantEyeTrackingService();
         Debug.Log("[EyeTracking] eye tracking service requested.");
     }
 
